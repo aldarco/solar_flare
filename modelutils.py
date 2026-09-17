@@ -114,7 +114,7 @@ def find_state_intervals(times, states, target=1, delta_t=0, merge=False, diurna
     ranges = list(map(lambda x: [x[0]+delta_t, x[1]+delta_t], ranges ))
     return ranges
 
-def validate_match(true_intervals, pred_intervals, dfamp, amp_threshold):
+def __validate_match(true_intervals, pred_intervals, dfamp, amp_threshold):
     # Asumimos que true_intervals y pred_intervals están ordenados cronológicamente
     match_data = []
     
@@ -166,6 +166,70 @@ def validate_match(true_intervals, pred_intervals, dfamp, amp_threshold):
     return matchdata
 
 
+def levelok(x, thr):
+    return x.mean() > thr
+
+def timeok(ti, tf):
+    return ti.hour >= 13 and tf.hour <= 21 and (ti.day==tf.day)
+
+def validate_match(true_intervals, pred_intervals, dfamp, amp_threshold):
+    # Asumimos que true_intervals y pred_intervals están ordenados cronológicamente
+    match_data = []
+    print("True events:\t", len(true_intervals))
+    print("Predicted events:\t", len(pred_intervals))
+    for ref_r in true_intervals:
+        # print(ref_r, len(pred_intervals))
+        match = False
+        
+        # iterar evaluando sonbre las predicciones
+        k = 0
+        while k < len(pred_intervals):
+            pred_r = pred_intervals[k]
+            
+            if not timeok(pred_r[0], pred_r[1]) or not levelok(dfamp.loc[pred_r[0]-dt.timedelta(minutes=5):pred_r[1]-dt.timedelta(minutes=5)], amp_threshold):
+                _dropped = pred_intervals.pop(k)
+                # print("removed: " , _dropped)
+                continue 
+            
+            # check if match (overlap between intervals)
+            if max([ref_r[0], pred_r[0]]) < min([ref_r[1], pred_r[1]]): 
+                match = True
+                # drop pred
+                pred_intervals.pop(k) 
+                
+                match_data.append([*ref_r, *pred_r,1,1])
+                continue 
+
+            # pred is before the true ref : FP
+            elif pred_r[1] < ref_r[0]: 
+                # Es un evento predicho que left behind with no match
+                match_data.append([np.nan, np.nan, *pred_r, 0,1])
+                pred_intervals.pop(k)
+                continue
+            
+            # pred is ahead of true ref
+            elif ref_r[1] < pred_r[0]:
+                break 
+            
+            k += 1
+
+        # no match for true ref
+        if not match:
+            match_data.append([*ref_r, np.nan, np.nan, 1,0])
+    # remained pred as FP
+    for pred_r in pred_intervals:
+         # filter by time and amp
+         #if not (pred_r[0].hour < 12 or pred_r[1].hour > 22 or dfamp.loc[pred_r[0]:pred_r[1]].mean() < 4):
+        if (pred_r[0].hour > 12 and pred_r[1].hour < 22 and dfamp.loc[pred_r[0]:pred_r[1]].mean() > amp_threshold):
+            match_data.append([np.nan, np.nan, *pred_r, 0,1])
+        else:
+            # print(f"Discarded FP : {pred_r}:: mean={dfamp.loc[pred_r[0]-dt.timedelta(minutes=5):pred_r[1]-dt.timedelta(minutes=5)].mean() > amp_threshold}")
+            # TODO ??
+            pass
+    matchdata = pd.DataFrame(match_data, columns=["t_true_1", "t_true_2", "t_pred_1", "t_pred_2", "true", "pred"])
+    return matchdata
+
+
 def getmetrics(df):
     # df: well defined input
     # returns: [precision, accuracy, recall]
@@ -173,3 +237,50 @@ def getmetrics(df):
     y_real = np.isnan(df["t1"])==False
     return precision_score(y_real, y_pred), accuracy_score(y_real, y_pred), recall_score(y_real, y_pred)
 
+# util functio to initialize params
+def calculate_mean_and_cov(features, labels):
+    unique_labels = np.unique(labels)
+    n_states = len(unique_labels)
+    n_features = features.shape[1]
+    
+    means = np.zeros((n_states, n_features))
+    covars = np.zeros((n_states, n_features, n_features))
+    
+    for i, state in enumerate(unique_labels):
+        state_data = features[labels == state]
+        means[i] = np.mean(state_data, axis=0)
+        cov = np.cov(state_data.T)
+        min_covar = 1e-4  # Valor pequeño para darle "volumen" a la gaussiana
+        cov = cov + np.eye(n_features) * min_covar
+        
+        cov = (cov + cov.T) / 2
+        covars[i] = cov
+        
+    return means, covars
+
+
+def calculate_startprob(labels):
+
+    n_states = len(np.unique(labels))
+    startprob = np.zeros(n_states)
+
+    initial_state = int(labels[0])
+    startprob[initial_state] = 1.0
+
+    return startprob
+    
+def calculate_transmat(labels):
+
+    n_states = len(np.unique(labels))
+    transmat = np.zeros((n_states, n_states))
+
+    # 1. Contar todas las transiciones en la secuencia
+    for i in range(len(labels) - 1):
+        from_state = int(labels[i])
+        to_state = int(labels[i+1])
+        transmat[from_state, to_state] += 1
+
+    row_sums = transmat.sum(axis=1, keepdims=True)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        transmat = np.where(row_sums > 0, transmat / row_sums, 0)
+    return transmat
