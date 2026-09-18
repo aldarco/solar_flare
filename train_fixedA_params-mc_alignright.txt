@@ -1,0 +1,144 @@
+
+==== Trial 0 ==============
+Features used: ['delta_amp', 'diff_amp']
+Train samples: 273007 | Test samples: 68252
+Transition Matrix A:
+ [[0.99895438 0.00104562]
+ [0.06586967 0.93413033]]
+
+Afinando parámetros con algoritmo EM...
+[OK] model Converged!
+
+Transmat
+model transmat A:
+ [[0.99895438 0.00104562]
+ [0.06586967 0.93413033]]
+
+initial transmat
+ [[0.99895438 0.00104562]
+ [0.06586967 0.93413033]]
+True events:	 90
+Predicted events:	 235
+
+ ----------------------------------------------------------------------------------------------------
+              precision    recall  f1-score   support
+
+           0       0.00      0.00      0.00        44
+           1       0.37      0.29      0.33        90
+
+    accuracy                           0.19       134
+   macro avg       0.19      0.14      0.16       134
+weighted avg       0.25      0.19      0.22       134
+
+Nueva Matriz de Confusión:
+[[ 0 44]
+ [64 26]]
+Endr of the training & validation
+
+==== Trial 1 ==============
+Features used: ['delta120min_amp_local', 'diff120min_amp_local']
+Train samples: 273007 | Test samples: 68252
+Transition Matrix A:
+ [[0.99895438 0.00104562]
+ [0.06586967 0.93413033]]
+
+Afinando parámetros con algoritmo EM...
+[OK] model Converged!
+
+Transmat
+model transmat A:
+ [[0.99895438 0.00104562]
+ [0.06586967 0.93413033]]
+
+initial transmat
+ [[0.99895438 0.00104562]
+ [0.06586967 0.93413033]]
+True events:	 90
+Predicted events:	 269
+
+ ----------------------------------------------------------------------------------------------------
+              precision    recall  f1-score   support
+
+           0       0.00      0.00      0.00        52
+           1       0.42      0.41      0.41        90
+
+    accuracy                           0.26       142
+   macro avg       0.21      0.21      0.21       142
+weighted avg       0.26      0.26      0.26       142
+
+Nueva Matriz de Confusión:
+[[ 0 52]
+ [53 37]]
+Endr of the training & validation
+
+==== Trial 2 ==============
+Features used: ['delta120min_amp_local', 'diff120min_amp_local', 'transient']
+Train samples: 273007 | Test samples: 68252
+Transition Matrix A:
+ [[0.99895438 0.00104562]
+ [0.06586967 0.93413033]]
+
+Afinando parámetros con algoritmo EM...
+[OK] model Converged!
+
+Transmat
+model transmat A:
+ [[0.99895438 0.00104562]
+ [0.06586967 0.93413033]]
+
+initial transmat
+ [[0.99895438 0.00104562]
+ [0.06586967 0.93413033]]
+True events:	 90
+Predicted events:	 257
+
+ ----------------------------------------------------------------------------------------------------
+              precision    recall  f1-score   support
+
+           0       0.00      0.00      0.00        98
+           1       0.32      0.51      0.39        91
+
+    accuracy                           0.24       189
+   macro avg       0.16      0.25      0.20       189
+weighted avg       0.15      0.24      0.19       189
+
+Nueva Matriz de Confusión:
+[[ 0 98]
+ [45 46]]
+Endr of the training & validation
+
+==== Trial 3 ==============
+Features used: ['transient']
+Train samples: 273007 | Test samples: 68252
+Transition Matrix A:
+ [[0.99895438 0.00104562]
+ [0.06586967 0.93413033]]
+
+Afinando parámetros con algoritmo EM...
+[OK] model Converged!
+
+Transmat
+model transmat A:
+ [[0.99895438 0.00104562]
+ [0.06586967 0.93413033]]
+
+initial transmat
+ [[0.99895438 0.00104562]
+ [0.06586967 0.93413033]]
+True events:	 90
+Predicted events:	 341
+
+ ----------------------------------------------------------------------------------------------------
+              precision    recall  f1-score   support
+
+           0       0.00      0.00      0.00        65
+           1       0.41      0.50      0.45        90
+
+    accuracy                           0.29       155
+   macro avg       0.20      0.25      0.23       155
+weighted avg       0.24      0.29      0.26       155
+
+Nueva Matriz de Confusión:
+[[ 0 65]
+ [45 45]]
+Endr of the training & validation
