@@ -169,14 +169,29 @@ def __validate_match(true_intervals, pred_intervals, dfamp, amp_threshold):
 def levelok(x, thr):
     return x.mean() > thr
 
-def timeok(ti, tf):
-    return ti.hour >= 13 and tf.hour <= 21 and (ti.day==tf.day)
-
+def timeok(ti, tf, lower_tspan=4, upper_tspan=60):
+    '''
+    ti : time begin of event
+    tf : time end of event
+    lower_tspan : minimum event duration
+    upper_tspan : maximum event duration
+    '''
+    # if lower_tspan <=(tf-ti)/np.timedelta64(1,'m') <= upper_tspan:
+    #     return True
+    # # elif  ti.hour >= 13 and tf.hour <= 21 and (ti.day==tf.day)
+    # else: 
+    #     return False
+    return lower_tspan <=(tf-ti)/np.timedelta64(1,'m') <= upper_tspan
+            
 def validate_match(true_intervals, pred_intervals, dfamp, amp_threshold):
+    '''
+    Validates the detection/predicton state sequence array 
+    
+    '''
     # Asumimos que true_intervals y pred_intervals están ordenados cronológicamente
     match_data = []
     print("True events:\t", len(true_intervals))
-    print("Predicted events:\t", len(pred_intervals))
+    print("Predicted (raw) events:\t", len(pred_intervals))
     for ref_r in true_intervals:
         # print(ref_r, len(pred_intervals))
         match = False
@@ -284,3 +299,22 @@ def calculate_transmat(labels):
     with np.errstate(divide='ignore', invalid='ignore'):
         transmat = np.where(row_sums > 0, transmat / row_sums, 0)
     return transmat
+
+
+def gmm_init_from_labels(X, y, n_states=2, n_mix=3, min_covar=1e-4):
+    D = X.shape[1]
+    means  = np.zeros((n_states, n_mix, D))
+    covars = np.zeros((n_states, n_mix, D))
+    weights = np.zeros((n_states, n_mix))
+
+    for s in range(n_states):
+        Xs = X[y == s]
+        mu = Xs.mean(0)
+        var = Xs.var(0) + min_covar
+        # Duplicate the single labeled mean across mixtures with small jitter
+        for m in range(n_mix):
+            means[s, m]  = mu + 1e-3 * np.random.randn(D)
+            covars[s, m] = var
+        weights[s] = np.ones(n_mix) / n_mix    # uniform mixture weights
+
+    return means, covars, weights
