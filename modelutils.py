@@ -182,7 +182,10 @@ def timeok(ti, tf, lower_tspan=4, upper_tspan=60):
     # else: 
     #     return False
     return lower_tspan <=(tf-ti)/np.timedelta64(1,'m') <= upper_tspan
-            
+
+
+
+    
 def validate_match(true_intervals, pred_intervals, dfamp, amp_threshold):
     '''
     Validates the detection/predicton state sequence array 
@@ -318,3 +321,125 @@ def gmm_init_from_labels(X, y, n_states=2, n_mix=3, min_covar=1e-4):
         weights[s] = np.ones(n_mix) / n_mix    # uniform mixture weights
 
     return means, covars, weights
+
+def latency_metrics(p_flare, t, true_intervals, on=0.7, off=0.3):
+    """
+    Métricas de detección temprana.
+
+    p_flare       : array (T,)  P(onset | pasado) por sample
+    t             : DatetimeIndex de largo T
+    true_intervals: lista de (t_onset, t_end) verdaderos
+    on, off       : umbrales de histéresis
+
+    Usage:
+    metrics = latency_metrics(p_flare, t_test, rise_true_intervals, on=0.7, off=0.3)
+    for k, v in metrics.items():
+        print(f"{k:18s}  {v}")
+    """
+    # Estados por histéresis
+    state = np.zeros(len(p_flare), dtype=int)
+    cur = 0
+    for i, p in enumerate(p_flare):
+        if cur == 0 and p > on:
+            cur = 1
+        elif cur == 1 and p < off:
+            cur = 0
+        state[i] = cur
+
+    # Transiciones 0 -> 1 = alarmas
+    alarm_idx = np.where(np.diff(state) == 1)[0] + 1
+    alarm_times = t[alarm_idx]
+
+    # TTD por evento verdadero
+    ttd = []
+    for (t0, t1) in true_intervals:
+        after = alarm_times[alarm_times >= t0]
+        after = after[after <= t1 + pd.Timedelta(minutes=30)]
+        if len(after) == 0:
+            ttd.append(np.nan)
+        else:
+            ttd.append((after[0] - t0).total_seconds() / 60.0)
+
+    ttd = np.array(ttd)
+    valid = ~np.isnan(ttd)
+
+    # Alarms/day (usa duración real del test)
+    dur_days = (t[-1] - t[0]).total_seconds() / 86400
+
+    # FPs / día (alarmas que no caen dentro de ningún evento real)
+    in_event = np.zeros(len(alarm_times), dtype=bool)
+    for i, ta in enumerate(alarm_times):
+        for (t0, t1) in true_intervals:
+            if t0 - pd.Timedelta(minutes=5) <= ta <= t1 + pd.Timedelta(minutes=30):
+                in_event[i] = True
+                break
+    fp_count = (~in_event).sum()
+
+    return {
+        "n_events":       len(true_intervals),
+        "n_detected":     int(valid.sum()),
+        "n_alarms":       len(alarm_times),
+        "ttd_min":        float(np.nanmin(ttd))  if valid.any() else np.nan,
+        "ttd_median":     float(np.nanmedian(ttd)) if valid.any() else np.nan,
+        "ttd_mean":       float(np.nanmean(ttd)) if valid.any() else np.nan,
+        "early_rate":     float(np.mean(ttd[valid] < 0)) if valid.any() else np.nan,
+        "alarms_per_day": len(alarm_times) / dur_days,
+        "fps_per_day":    fp_count / dur_days,
+    }
+
+
+
+def classify_flare(peak_flux):
+    if peak_flux >= 1e-4:  return "X"
+    if peak_flux >= 1e-5:  return "M"
+    if peak_flux >= 1e-6:  return "C"
+    if peak_flux >= 1e-7:  return "B"
+    return "A"
+
+def peak_flux_in(df, t0, t1, col="GOES18", pad_min=5):
+    """Pico de flujo en [t0-pad, t1+pad], robusto a desalineación de bordes."""
+    t0p = t0 - pd.Timedelta(minutes=pad_min)
+    t1p = t1 + pd.Timedelta(minutes=pad_min)
+    seg = df.loc[t0p:t1p, col].dropna()
+    return seg.max() if len(seg) > 0 else np.nan
+
+def event_metrics_by_threshold(matchdf, true_intervals, df,
+                               min_class="M", goes_col="GOES18"):
+    """
+    Recalcula P/R/F1 a nivel evento filtrando por intensidad mínima.
+
+    min_class : uno de {"C", "M", "X"}
+    """
+    allowed = {"C": ["C","M","X"], "M": ["M","X"], "X": ["X"]}[min_class]
+
+    # 1. Etiquetar cada evento verdadero
+    true_class = {}
+    for (t0, t1) in true_intervals:
+        true_class[(t0, t1)] = classify_flare(peak_flux_in(df, t0, t1, goes_col))
+
+    TP = FP = FN = 0
+    for _, row in matchdf.iterrows():
+        has_true = not pd.isna(row["t_true_1"])
+        has_pred = not pd.isna(row["t_pred_1"])
+
+        if has_true and has_pred:
+            key = (row["t_true_1"], row["t_true_2"])
+            if true_class.get(key, "A") in allowed:
+                TP += 1
+            else:
+                FP += 1   # match a evento sub-umbral -> cuenta como falsa alarma
+        elif has_true and not has_pred:
+            key = (row["t_true_1"], row["t_true_2"])
+            if true_class.get(key, "A") in allowed:
+                FN += 1
+            # evento sub-umbral perdido -> se ignora
+        elif has_pred and not has_true:
+            FP += 1
+
+    P  = TP / (TP + FP) if (TP + FP) > 0 else 0.0
+    R  = TP / (TP + FN) if (TP + FN) > 0 else 0.0
+    F1 = 2*P*R / (P + R)  if (P + R) > 0     else 0.0
+
+    return {"min_class": min_class, "TP": TP, "FP": FP, "FN": FN,
+            "P": P, "R": R, "F1": F1}
+
