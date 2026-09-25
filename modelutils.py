@@ -443,3 +443,6 @@ def event_metrics_by_threshold(matchdf, true_intervals, df,
     return {"min_class": min_class, "TP": TP, "FP": FP, "FN": FN,
             "P": P, "R": R, "F1": F1}
 
+
+
+def diagnose():
