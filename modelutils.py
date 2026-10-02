@@ -446,3 +446,5 @@ def event_metrics_by_threshold(matchdf, true_intervals, df,
 
 
 def diagnose():
+    # TODO
+    pass
